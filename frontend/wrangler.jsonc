@@ -1,0 +1,10 @@
+// Cloudflare Workers (Pages) config — publishes the Vite build in ./dist.
+// Deploy: `wrangler deploy` from the frontend/ directory.
+{
+  "name": "bloodbridge-app",
+  "compatibility_date": "2026-01-01",
+  "assets": {
+    "directory": "dist",
+    "not_found_handling": "single-page-application"
+  }
+}
