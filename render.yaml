@@ -1,0 +1,25 @@
+# Render Blueprint — BloodBridge FastAPI backend.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: bloodbridge-api
+    runtime: python
+    plan: free          # sleeps after 15 min idle; ~1 min cold start
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: BLOODBRIDGE_DATABASE_URL
+        value: sqlite:///./bloodbridge.db
+      # Free plan has no persistent disk: the DB is recreated and demo data
+      # re-seeded on every deploy/restart. Set a Postgres URL later for durable data.
+      - key: BLOODBRIDGE_AUTH_SECRET
+        generateValue: true
+      - key: BLOODBRIDGE_APP_BASE_URL
+        sync: false          # set to the live frontend URL after first deploy
+      - key: BLOODBRIDGE_EXTRA_CORS_ORIGINS
+        sync: false          # set to the live frontend URL after first deploy
+      - key: BLOODBRIDGE_SEED_DEMO_DATA
+        value: "true"
