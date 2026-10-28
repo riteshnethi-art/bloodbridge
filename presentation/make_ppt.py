@@ -17,9 +17,12 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
+LIVE_URL = "https://bloodbridge-app.riteshnethi-art.workers.dev"
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
 OUT = os.path.abspath(os.path.join(HERE, "..", "BloodBridge_Pitch.pptx"))
+TOTAL_SLIDES = 7
 
 # ---------------------------------------------------------------- brand
 BRAND = RGBColor(0xC8, 0x1E, 0x1E)      # #C81E1E
@@ -165,10 +168,10 @@ def header(slide, kicker, title):
 
 def footer(slide, n):
     textbox(slide, 0.44, 7.08, 9.0, 0.3,
-            [([("BloodBridge - AI-assisted blood donor discovery", 9, False, GRAY)],
+            [([("BloodBridge - AI-assisted blood donor discovery  \u00b7  LIVE: " + LIVE_URL, 9, False, GRAY)],
               PP_ALIGN.LEFT, 0)])
-    textbox(slide, 12.3, 7.08, 0.6, 0.3,
-            [([(f"{n} / 6", 9, False, GRAY)], PP_ALIGN.RIGHT, 0)])
+    textbox(slide, 12.0, 7.08, 0.9, 0.3,
+            [([(f"{n} / {TOTAL_SLIDES}", 9, False, GRAY)], PP_ALIGN.RIGHT, 0)])
 
 
 def node(slide, x, y, w, h, num, title, sub, fill=WHITE, line=BORDER,
@@ -184,6 +187,16 @@ def node(slide, x, y, w, h, num, title, sub, fill=WHITE, line=BORDER,
     return card
 
 
+def crop_top(src, dst, h_over_w):
+    """Crop a screenshot from the top so its height/width ratio ≈ h_over_w."""
+    img = Image.open(src).convert("RGB")
+    w, h = img.size
+    cut = int(min(h, w * h_over_w))
+    img = img.crop((0, 0, w, cut))
+    img.save(dst, quality=92)
+    return dst
+
+
 # ---------------------------------------------------------------- build
 def build():
     os.makedirs(ASSETS, exist_ok=True)
@@ -194,27 +207,33 @@ def build():
     prs = Presentation()
     prs.slide_width, prs.slide_height = Inches(SLIDE_W), Inches(SLIDE_H)
 
+    # live-site assets (screen captures + QR), cropped for consistent cards
+    shots = {}
+    for name, ratio in (("shot_landing", 0.95), ("shot_assistant_gate", 0.70),
+                        ("shot_matches", 1.05)):
+        src = os.path.join(ASSETS, name + ".jpg")
+        if os.path.exists(src):
+            dst = os.path.join(ASSETS, name + "_card.jpg")
+            crop_top(src, dst, ratio)
+            shots[name] = dst
+    qr_png = os.path.join(ASSETS, "live_qr.png")
+
     # ================================================== SLIDE 1 - title
     s = blank(prs)
     rect(s, 0, 0, SLIDE_W, SLIDE_H, fill=LIGHT, shape=MSO_SHAPE.RECTANGLE)
     rect(s, 0, 0, SLIDE_W, 0.16, fill=BRAND, shape=MSO_SHAPE.RECTANGLE)
-    s.shapes.add_picture(drop_png, Inches(5.97), Inches(0.72), width=Inches(1.4))
-    textbox(s, 1.0, 2.18, 11.33, 1.0,
+    s.shapes.add_picture(drop_png, Inches(5.97), Inches(1.67), width=Inches(1.4))
+    textbox(s, 1.0, 3.13, 11.33, 1.0,
             [([("BloodBridge", 52, True, DARK)], PP_ALIGN.CENTER, 0)])
-    textbox(s, 1.0, 3.18, 11.33, 0.5,
+    textbox(s, 1.0, 4.13, 11.33, 0.5,
             [([("AI-assisted blood donor discovery, matching and community engagement",
                 19, False, GRAY)], PP_ALIGN.CENTER, 0)])
-    textbox(s, 1.0, 3.78, 11.33, 0.5,
+    textbox(s, 1.0, 4.73, 11.33, 0.5,
             [([("\u201cFinding a donor should never be the emergency.\u201d",
                 16, True, BRAND)], PP_ALIGN.CENTER, 0)])
-    chips = ["Working full-stack MVP", "63 backend tests", "Privacy-first design",
-             "WhatsApp-ready engine"]
-    cw, gap = 2.72, 0.26
-    x0 = (SLIDE_W - (len(chips) * cw + (len(chips) - 1) * gap)) / 2
-    for i, c in enumerate(chips):
-        ch = rect(s, x0 + i * (cw + gap), 4.62, cw, 0.52, fill=WHITE, line=BORDER,
-                  line_w=1.25, radius=0.5)
-        write(ch, [([(c, 12, True, DARK)], PP_ALIGN.CENTER, 0)])
+    live_badge = rect(s, 4.47, 5.42, 4.4, 0.44, fill=GREEN_SOFT, line=GREEN, line_w=1.25)
+    write(live_badge, [([("\u25cf  LIVE NOW  -  it works in production", 12, True, GREEN)],
+                        PP_ALIGN.CENTER, 0)])
     band = rect(s, 0, 6.72, SLIDE_W, 0.78, fill=BRAND, shape=MSO_SHAPE.RECTANGLE)
     write(band, [([("Supports preliminary donor discovery only - never medical advice, "
                     "never a guarantee of donors or blood availability.", 12.5, True, WHITE)],
@@ -281,9 +300,9 @@ def build():
                      ("BloodBridge supports discovery only - it never guarantees donors, "
                       "never gives medical advice, and never claims a request was fulfilled.",
                       12.5, False, DARK)], PP_ALIGN.CENTER, 0)])
-    proofs = [("63", "backend pytest tests", "compatibility, matching, referrals, assistant"),
-              ("10", "frontend vitest tests", "forms, validation, routing"),
-              ("0", "console errors", "in the live end-to-end browser run")]
+    proofs = [("8", "blood groups covered", "full who-can-give-whom compatibility matrix"),
+              ("<1 min", "from plea to ranked list", "one free-text message in, ranked donors out"),
+              ("0", "donor numbers exposed", "contact opens only after a donor accepts")]
     pw, pgap = 3.95, 0.3
     for i, (big, lead, sub) in enumerate(proofs):
         x = 0.44 + i * (pw + pgap)
@@ -353,10 +372,45 @@ def build():
          "when configured - until then it is clearly labeled Demo Mode"),
     ], size=12.5, gap=11)
 
-    # ================================================== slide 5 - rewards & referrals
+    # ================================================== slide 5 - live product walkthrough
+    s = blank(prs)
+    header(s, "Live now - not on localhost", "The real product, running in production today")
+    footer(s, 5)
+    cols = [
+        ("shot_landing", "Landing & onboarding",
+         "Compatibility table, safety notice and a 4-step tour - a stranger can act in 60 seconds"),
+        ("shot_assistant_gate", "Assistant confirmation gate",
+         "Full structured summary with per-field edit commands - nothing submits without explicit approval"),
+        ("shot_matches", "Ranked matches, explained",
+         "Score, distance, availability and a per-donor explanation - contact stays consent-gated"),
+    ]
+    cw, cgap, cy2, ch2 = 3.95, 0.3, 1.66, 4.72
+    img_w = cw - 0.12
+    cap_h = 0.92
+    ratios = {"shot_landing": 0.95, "shot_assistant_gate": 0.70, "shot_matches": 1.05}
+    for i, (key, cap_title, cap_sub) in enumerate(cols):
+        x = 0.44 + i * (cw + cgap)
+        card = rect(s, x, cy2, cw, ch2, fill=WHITE, line=BORDER, line_w=1.25, radius=0.05)
+        path = shots.get(key)
+        if path:
+            s.shapes.add_picture(path, Inches(x + 0.06), Inches(cy2 + 0.06), width=Inches(img_w))
+            actual_h = img_w * ratios[key] if key in shots else 0
+            used = min(actual_h, ch2 - cap_h - 0.18)
+            cap_y = cy2 + 0.06 + used + 0.08
+            textbox(s, x + 0.14, cap_y, cw - 0.28, cap_h, [
+                ([(cap_title, 11.5, True, DARK)], PP_ALIGN.LEFT, 3),
+                ([(cap_sub, 9, False, GRAY)], PP_ALIGN.LEFT, 0),
+            ])
+    band = rect(s, 0.44, 6.55, 12.45, 0.46, fill=GREEN_SOFT, line=GREEN, line_w=1.0)
+    write(band, [([("Deployed on free tiers - ", 11, True, DARK),
+                   ("Cloudflare Pages (frontend) + Render + SQLite (backend). "
+                    "Live now, scan the QR on the last slide", 11, False, DARK)],
+                  PP_ALIGN.CENTER, 0)]);
+
+    # ================================================== slide 6 - rewards & referrals
     s = blank(prs)
     header(s, "Community engine", "Rewards and referrals that keep donors engaged")
-    footer(s, 5)
+    footer(s, 6)
     cy, chh = 1.72, 4.72
     # rewards card
     rect(s, 0.44, cy, 6.0, chh, fill=WHITE, line=BORDER, line_w=1.25, radius=0.06)
@@ -364,14 +418,14 @@ def build():
     write(h1, [([("COMMUNITY REWARDS", 13.5, True, WHITE)], PP_ALIGN.LEFT, 0)],
           m=(0.25, 0.1, 0, 0))
     bullets(s, 0.75, cy + 0.75, 5.45, chh - 0.9, [
-        ("Earn points", "for community-friendly actions: complete profile, respond to "
-         "requests, invite friends, learn donation facts"),
+        ("Earn recognition", "badges and certificates for completing your profile, "
+         "inviting friends and learning donation facts"),
         ("Redeem", "for partner offers from verified local partners - always labeled "
          "\u201cDemo Partner\u201d in the demo"),
         ("Transactional claims", "reserve \u2192 verify \u2192 redeem; every step is "
          "audited and race-safe"),
-        ("Never cash", "no money, no gift cards, and points are never tied to "
-         "donating blood - engagement only"),
+        ("Never cash", "no money, no gift cards, and nothing is ever tied to "
+         "donating blood - recognition only"),
     ], size=12, gap=9)
     # referral card with funnel
     rect(s, 6.89, cy, 6.0, chh, fill=WHITE, line=BORDER, line_w=1.25, radius=0.06)
@@ -407,10 +461,10 @@ def build():
                     "every incentive is disclosed in the UI.", 11.5, False, DARK)],
                   PP_ALIGN.CENTER, 0)])
 
-    # ================================================== slide 6 - tech & demo
+    # ================================================== slide 7 - tech & demo
     s = blank(prs)
-    header(s, "Under the hood", "Architecture, quality and how to try it")
-    footer(s, 6)
+    header(s, "Under the hood", "Architecture, quality and how to try it live")
+    footer(s, 7)
     tiers = [
         ("Frontend", "React 18 \u00b7 TypeScript \u00b7 Vite \u00b7 Tailwind\n12 pages, "
          "protected routes, notification bell"),
@@ -418,51 +472,38 @@ def build():
          "(PBKDF2 + HMAC tokens)"),
         ("Data", "SQLAlchemy ORM \u00b7 15 models\nSQLite now, PostgreSQL-ready by config"),
     ]
-    tw, tgap, ty, th = 3.6, 0.62, 1.66, 1.34
+    tw, tgap, ty, th = 3.6, 0.62, 1.78, 1.62
     x0 = (SLIDE_W - (3 * tw + 2 * tgap)) / 2
     for i, (t, sub) in enumerate(tiers):
         x = x0 + i * (tw + tgap)
         node(s, x, ty, tw, th, i + 1, t, sub)
         if i < 2:
             arrow(s, x + tw + 0.06, ty + th / 2, x + tw + tgap - 0.06, ty + th / 2)
-    # optional integrations stack under the API tier
-    api_cx = x0 + 1.5 * tw + tgap
-    opt_w = 3.3
-    opt1 = rect(s, api_cx - opt_w / 2, ty + th + 0.24, opt_w, 0.62, fill=WHITE,
-                line=GRAY, line_w=1.0, radius=0.15)
-    write(opt1, [([("Optional: Gemini extraction", 10, True, GRAY)],
-                  PP_ALIGN.CENTER, 1),
-                 ([("falls back to deterministic parser", 8.5, False, GRAY)],
-                  PP_ALIGN.CENTER, 0)])
-    arrow(s, api_cx, ty + th + 0.22, api_cx, ty + th + 0.03, color=GRAY, w=1.25)
-    opt2 = rect(s, api_cx - opt_w / 2, ty + th + 0.96, opt_w, 0.62, fill=WHITE,
-                line=GRAY, line_w=1.0, radius=0.15)
-    write(opt2, [([("Optional: WhatsApp Cloud API", 10, True, GRAY)],
-                  PP_ALIGN.CENTER, 1),
-                 ([("webhook verify \u00b7 dedupe \u00b7 demo labeling", 8.5, False, GRAY)],
-                  PP_ALIGN.CENTER, 0)])
     # quality card
-    qy = 4.72
-    rect(s, 0.44, qy, 7.3, 2.05, fill=WHITE, line=BORDER, line_w=1.25, radius=0.06)
-    textbox(s, 0.7, qy + 0.1, 6.8, 0.35,
+    qy = 4.35
+    rect(s, 0.44, qy, 7.3, 2.3, fill=WHITE, line=BORDER, line_w=1.25, radius=0.06)
+    textbox(s, 0.7, qy + 0.12, 6.8, 0.35,
             [([("QUALITY & SAFETY", 12.5, True, DARK)], PP_ALIGN.LEFT, 0)])
-    bullets(s, 0.7, qy + 0.46, 6.9, 1.5, [
-        "63 backend tests + 10 frontend tests, all green",
+    bullets(s, 0.7, qy + 0.52, 6.9, 1.7, [
+        "73 automated tests, all green, plus a live end-to-end browser run",
         "Donor phone/address never exposed publicly; contact is consent-gated",
         "Compliance disclaimers on every page and every assistant reply",
         "Audit log for admin actions; demo data clearly seeded & labeled",
-    ], size=11, gap=5)
-    # demo card
-    rect(s, 8.0, qy, 4.89, 2.05, fill=BRAND_SOFT, line=BRAND, line_w=1.5, radius=0.06)
-    textbox(s, 8.25, qy + 0.1, 4.4, 0.35,
-            [([("TRY THE DEMO", 12.5, True, BRAND)], PP_ALIGN.LEFT, 0)])
-    textbox(s, 8.25, qy + 0.48, 4.45, 1.5, [
-        ([("http://localhost:5173", 13, True, DARK)], PP_ALIGN.LEFT, 6),
-        ([("Admin:  admin@bloodbridge.demo", 11, False, DARK)], PP_ALIGN.LEFT, 2),
-        ([("Password:  demo123", 11, False, DARK)], PP_ALIGN.LEFT, 8),
-        ([("Seeded donors, offers, campaign & live request BB-6D4006E5", 10, False, GRAY)],
+    ], size=11, gap=6)
+    # live-demo card with QR
+    rect(s, 8.0, qy, 4.89, 2.3, fill=BRAND_SOFT, line=BRAND, line_w=1.5, radius=0.06)
+    textbox(s, 8.25, qy + 0.12, 3.6, 0.35,
+            [([("SCAN - IT IS LIVE NOW", 12.5, True, BRAND)], PP_ALIGN.LEFT, 0)])
+    textbox(s, 8.25, qy + 0.52, 3.35, 1.65, [
+        ([("bloodbridge-app.", 12.5, True, DARK)], PP_ALIGN.LEFT, 2),
+        ([("riteshnethi-art.workers.dev", 12.5, True, DARK)], PP_ALIGN.LEFT, 8),
+        ([("Free tier: Cloudflare Pages + Render", 10, False, DARK)], PP_ALIGN.LEFT, 6),
+        ([("No login needed - demo data, clearly labeled", 9.5, False, GRAY)],
          PP_ALIGN.LEFT, 0),
     ])
+    qr_frame = rect(s, 11.05, qy + 0.18, 1.65, 1.65, fill=WHITE, line=BORDER, line_w=1.25, radius=0.06)
+    if os.path.exists(qr_png):
+        s.shapes.add_picture(qr_png, Inches(11.13), Inches(qy + 0.26), width=Inches(1.49))
 
     prs.save(OUT)
     return OUT

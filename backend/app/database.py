@@ -13,12 +13,16 @@ from .config import settings
 def _make_engine():
     url = settings.database_url
     if url.startswith("sqlite"):
-        # SQLite is single-writer; a static single connection avoids
-        # "database is locked" issues across threads in dev and tests.
+        # One connection per checkout (default QueuePool) so concurrent
+        # requests never share a single sqlite3 connection. Sharing one
+        # connection (StaticPool) crashes under FastAPI's threadpool with
+        # "InterfaceError: bad parameter or other API misuse" - and made
+        # auth lookups intermittently fail as spurious 401s. WAL mode
+        # (set on connect below) keeps concurrent readers fast, and the
+        # busy timeout smooths concurrent writers.
         return create_engine(
             url,
-            connect_args={"check_same_thread": False},
-            poolclass=__import__("sqlalchemy.pool", fromlist=["StaticPool"]).StaticPool,
+            connect_args={"check_same_thread": False, "timeout": 30},
         )
     return create_engine(url)
 
