@@ -12,9 +12,11 @@ services:
     healthCheckPath: /health
     envVars:
       - key: BLOODBRIDGE_DATABASE_URL
-        value: sqlite:///./bloodbridge.db
-      # Free plan has no persistent disk: the DB is recreated and demo data
-      # re-seeded on every deploy/restart. Set a Postgres URL later for durable data.
+        sync: false        # set ONCE in the Render dashboard to your managed
+                           # Postgres URL, e.g. Neon: postgresql+psycopg://...?sslmode=require
+                           # (free tier SQLite lives on an ephemeral disk - it is
+                           # wiped on every restart/spin-down; keep the real URL
+                           # out of this public repo)
       - key: BLOODBRIDGE_AUTH_SECRET
         generateValue: true
       - key: BLOODBRIDGE_APP_BASE_URL

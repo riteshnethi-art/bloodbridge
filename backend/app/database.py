@@ -24,7 +24,11 @@ def _make_engine():
             url,
             connect_args={"check_same_thread": False, "timeout": 30},
         )
-    return create_engine(url)
+    # Managed Postgres (e.g. Neon free tier): idle compute gets suspended and
+    # drops open connections. pool_pre_ping makes SQLAlchemy validate each
+    # pooled connection and transparently reconnect, so a database suspend
+    # never surfaces as a 500 "connection closed" error.
+    return create_engine(url, pool_pre_ping=True)
 
 
 engine = _make_engine()
