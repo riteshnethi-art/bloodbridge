@@ -1,7 +1,7 @@
 """Blood request workflow service: creation, validation, status transitions."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,10 @@ def validate_request_payload(data: dict) -> dict:
     if urgency not in ("critical", "urgent", "routine"):
         errors.append("urgency must be critical, urgent or routine")
     needed_by = data.get("needed_by")
+    # Normalize: browsers send UTC ISO with 'Z' (tz-aware); the app stores naive
+    # UTC (see database.utcnow). Compare likes with likes - never crash either way.
+    if needed_by is not None and hasattr(needed_by, "tzinfo") and needed_by.tzinfo is not None:
+        needed_by = needed_by.astimezone(timezone.utc).replace(tzinfo=None)
     now = utcnow()
     if not isinstance(needed_by, object) or not hasattr(needed_by, "timestamp"):
         errors.append("needed_by must be a date/time")
