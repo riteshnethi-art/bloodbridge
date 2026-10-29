@@ -79,6 +79,10 @@ ROWS = [
     ("Guest/public request creation via API", "API+Database", "PASS",
      "Raw POST /api/requests with NO auth header", "Persisted request object returned",
      "Request object returned with public_id BB-4785371B; persisted (see matching and persistence rows)."),
+    ("Find Blood form submit (full UI path)", "E2E (FE+API+DB)", "PASS",
+     "Nav 'Find Blood' -> filled all 11 form fields (O+ / 2 units / Hyderabad / Madhapur / hospital / urgent / preferred contact) -> Review request -> Confirm & submit",
+     "Confirmation screen 'Request {public id} submitted' + potential-donor count",
+     "First live submit exposed a genuine server bug (HTTP 500, documented as Issue 7) which was root-caused and hot-fixed the same day; after the fix the FULL UI path worked live end-to-end: request BB-48F83185 created (O+, 2 units, Osmania General Hospital, Hyderabad) with confirmation screen and 3 potential donors ranked 100/100 down to 83/100 (Appendix A-5). Nav link, client validation and both gate steps verified."),
     ("Server-side input validation", "Backend/API", "PASS",
      "POST /api/requests with invalid urgency 'normal'", "422 with actionable field error",
      "422 returned: \"Input should be 'critical', 'urgent' or 'routine'\" - malformed data refused before reaching the database."),
@@ -271,9 +275,10 @@ def build():
         "urgently\") in a single message, collected the remaining six fields conversationally, forced an explicit confirmation "
         "gate, and on approval created real request BB-C1CC3468 in the database. A second, API-created request (BB-4785371B) "
         "produced a ranked match list of 5 potential donors with transparent scores (97/100 down to 70/100) and a per-donor "
-        "explanation, while never exposing donor contact details before consent. Server-side validation actively rejects "
-        "malformed input (verified with an HTTP 422), and data persisted from the previous test day proves real database "
-        "storage - the site is not merely reciting static text.", BODY))
+        "explanation, while never exposing donor contact details before consent. The Find Blood form path was walked the same "
+        "way: it exposed an HTTP 500 bug that was root-caused and fixed the same day (Issue 7). Server-side validation "
+        "actively rejects malformed input (verified with an HTTP 422), and data persisted from the previous test day proves "
+        "real database storage - the site is not merely reciting static text.", BODY))
     story.append(P(
         "In total <b>%d checks</b> were executed: <b>%d PASS</b>, <b>%d PARTIAL</b>, <b>%d FAIL</b> and <b>%d NOT TESTED</b>. "
         "Of the %d graded checks, %d passed (%.0f%%). No feature was found broken; zero FAIL results. The two PARTIAL results "
@@ -294,10 +299,11 @@ def build():
              ("Database persistence:", "data created earlier is still served later - across a day boundary (SQLite on Render)."),
              ("End-to-end:", "real UI interactions (typing/clicking) that trigger backend calls and persist data.")])
     story.append(P(
-        "Rules respected: published demo accounts only; the only data created were two user-authorized demo artifacts (BB-C1CC3468, "
-        "BB-4785371B) used as evidence; no messages sent; no rewards claimed or approved; no moderation actions; no real user data "
-        "published (the live dataset consists of fictional seed data plus those demo artifacts). A visible page is never claimed as "
-        "a working feature unless its interaction or backing data was actually exercised.", BODY))
+        "Rules respected: published demo accounts only; the only data created were a small number of user-authorized demo "
+        "artifacts (BB-C1CC3468, BB-4785371B and the Find-Blood walkthrough request); no messages sent; no rewards claimed or "
+        "approved; no moderation actions; no real user data published (the live dataset consists of fictional seed data plus "
+        "those demo artifacts). A visible page is never claimed as a "
+        "working feature unless its interaction or backing data was actually exercised.", BODY))
 
     # ---- 4 counts
     story.append(Spacer(1, 4))
@@ -344,8 +350,19 @@ def build():
               ("LOW", "Contact verification is simulated (email instantly marked verified, disclosed in-app). Not a defect in "
                       "the demo scope; must become real verification before public launch."),
               ("LOW", "SQLite data resets whenever the backend redeploys (free-tier trade-off). Acceptable for the demo; "
-                      "disclose it to judges as by-design refreshable demo data.")]
-    sev_style = {"HIGH": (RED, RED_SOFT), "MEDIUM": (AMBER, AMBER_SOFT), "LOW": (GRAY, GRAY_SOFT)}
+                      "disclose it to judges as by-design refreshable demo data."),
+              ("HIGH (FIXED)", "HTTP 500 on POST /api/requests from the Find Blood form: the browser converts the needed-by "
+                               "field to UTC ISO with a 'Z' suffix (timezone-aware), while the backend compares stored "
+                               "timestamps as naive UTC - the future-date check crashed with "
+                               "'can't compare offset-naive and offset-aware datetimes'. Found by the first live form "
+                               "submit in this test run (the earlier API checks passed because they happened to send naive "
+                               "dates). Same-day fix: normalize any timezone-aware datetime to naive UTC inside "
+                               "validate_request_payload; all 63 backend tests pass; fix redeployed and re-verified live."),
+              ("LOW", "The frontend maps ANY failed HTTP call, including a 500, to 'Cannot reach the BloodBridge server. "
+                      "Is the backend running?' - misleading during diagnosis. Suggested: surface the server's error detail "
+                      "when a response body exists.")]
+    sev_style = {"HIGH": (RED, RED_SOFT), "HIGH (FIXED)": (GREEN, GREEN_SOFT),
+                 "MEDIUM": (AMBER, AMBER_SOFT), "LOW": (GRAY, GRAY_SOFT)}
     it_data = [[Paragraph(sev, S("se", 8, sev_style[sev][0], bold=True, align=1)),
                 Paragraph(esc(txt), S("ii", 8.5, BODYC, leading=10.6))] for sev, txt in issues]
     it = Table(it_data, colWidths=[49, 466])
@@ -383,7 +400,8 @@ def build():
     # ---- 8 fixes
     story.append(Spacer(1, 6))
     story.append(P("8. Recommended fixes (prioritized)", H2))
-    fixes = [("Critical", "None found. No broken core flow, crash, broken link or data-integrity failure was observed in the verified scope."),
+    fixes = [("Critical", "None outstanding. The one HIGH-severity bug found during this testing - an HTTP 500 on the Find "
+                          "Blood form submission - was root-caused and fixed the same day, and re-verified live (Issue 7)."),
              ("High", "1) Keep the backend awake before the demo (uptime pinger on /health every 10 minutes, or simply open the site "
                       "right before presenting) - the single highest-value action for tomorrow. 2) State the redeploy-wipes-SQLite "
                       "behavior explicitly so everyone knows the demo data is by-design refreshable."),
@@ -403,7 +421,8 @@ def build():
                      esc("Public site: hosting, landing, all 11 routes, login, join-form validation, graceful errors "
                          "(bad request id, unknown route).") + "<br/><br/>" +
                      esc("Core loop end-to-end: Assistant intake -> confirmation gate -> request persisted (BB-C1CC3468); "
-                         "API request creation (BB-4785371B); ranked matching with per-donor explanations; consent-gated "
+                         "API request creation (BB-4785371B); Find Blood form submit incl. nav link and two-step gate "
+                         "(after a same-day hotfix, Issue 7); ranked matching with per-donor explanations; consent-gated "
                          "contact UI; server-side 422 validation; persistence across a test-day boundary.") + "<br/><br/>" +
                      esc("Operational surfaces: requester/donor dashboards incl. the no-profile state, admin stats "
                          "(13 users / 10 donors / 4 offers), masked admin donor list, referrals with unique code and share "
@@ -438,7 +457,8 @@ def build():
     crops = [("shot_landing", 0.52, "A-1  Landing page: compatibility guide and safety notice"),
              ("shot_assistant_gate", 0.62, "A-2  Bridge Assistant confirmation gate (pre-submit)"),
              ("shot_matches", 0.60, "A-3  Ranked matches with per-donor explanations"),
-             ("shot_rewards", 0.42, "A-4  Community rewards with honest 'Demo Partner' labels")]
+             ("shot_rewards", 0.42, "A-4  Community rewards with honest 'Demo Partner' labels"),
+             ("shot_findblood", 0.58, "A-5  Find Blood form path end-to-end: live ranked match list")]
     shots = [crop_shot(n, f) + (lbl,) for n, f, lbl in crops if crop_shot(n, f)]
     for i in range(0, len(shots), 2):
         row, caps = [], []
